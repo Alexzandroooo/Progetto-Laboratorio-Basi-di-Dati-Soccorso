@@ -317,6 +317,12 @@ BEGIN
     IF v_stato != 'attiva' THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'ERRORE: Impossibile avviare la missione. La richiesta associata non è in stato "attiva".';
     END IF;
+   
+   -- 2.5 Controllo Presenza Caposquadra
+    IF p_id_caposquadra IS NULL OR p_id_caposquadra <= 0 THEN
+        SIGNAL SQLSTATE '45000' 
+        SET MESSAGE_TEXT = 'ERRORE: Impossibile avviare la missione. È obbligatorio designare un caposquadra.';
+    END IF;
 
     -- 3. Creazione Missione
     INSERT INTO missione (ID_richiesta, posizione, timestamp_iniziale)
@@ -327,10 +333,8 @@ BEGIN
     UPDATE richiesta SET stato = 'in corso' WHERE ID = p_id_richiesta;
 
     -- 4. Assegnamento Caposquadra
-    IF p_id_caposquadra IS NOT NULL AND p_id_caposquadra > 0 THEN
         INSERT INTO assegnamento (ID_utente, codice_missione, ruolo)
         VALUES (p_id_caposquadra, v_codice_missione, 'caposquadra');
-    END IF;
 
     -- 5. Inserimento Operatori
     IF p_operatori_csv IS NOT NULL AND p_operatori_csv != '' THEN
@@ -400,7 +404,6 @@ CREATE PROCEDURE chiudi_missione (
 )
 BEGIN
     DECLARE v_timestamp_iniziale DATETIME;
-    DECLARE v_num_capisquadra INT;
     DECLARE v_id_richiesta INT;
     DECLARE v_stato_richiesta VARCHAR(20); -- Variabile per memorizzare lo stato
 
@@ -422,16 +425,6 @@ BEGIN
         SIGNAL SQLSTATE '45000'
         SET MESSAGE_TEXT = 'Errore Vincolo: Il timestamp finale non può essere antecedente al timestamp iniziale.';
     END IF;
-
-    -- Controllo presenza caposquadra
-    SELECT COUNT(*) INTO v_num_capisquadra
-    FROM assegnamento
-    WHERE codice_missione = p_codice_missione AND ruolo = 'caposquadra';
-
-    IF v_num_capisquadra = 0 THEN
-        SIGNAL SQLSTATE '45000'
-        SET MESSAGE_TEXT = 'Errore Vincolo: Impossibile chiudere la missione. Nessun caposquadra assegnato alla squadra.';
-    ELSE
         -- Aggiornamento missione
         UPDATE missione
         SET timestamp_finale = p_timestamp_finale, lvl_successo = p_lvl_successo
@@ -444,7 +437,7 @@ BEGIN
 
         -- Chiusura della richiesta associata
         UPDATE richiesta SET stato = 'chiusa' WHERE ID = v_id_richiesta;
-    END IF;
+
 END$$
 
 DELIMITER ;
